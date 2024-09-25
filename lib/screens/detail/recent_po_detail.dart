@@ -238,13 +238,27 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
 
       };
     }).toList();
+    List<Map<String, dynamic>> dataScanOver = scannedResults.map((item) {
+      return {
+        "pono": item['pono'],
+        "itemsku": '',
+        "skuname": item['item_name'],
+        "barcode": item['vendorbarcode'] ?? '',
+        "vendorbarcode": item['barcode'],
+        "qty": item['qty_scanned'].toString(),
+        "scandate": item['scandate'],
+        "machinecd": item['device_name'],
+        "qtykoli": item['qty_koli'].toString(),
+
+      };
+    }).toList();
 
     final body = json.encode({
       "USERID": userId,
       "MACHINECD": device_name,
       "PONO": widget.poNumber,
       "DATASCAN": dataScan,
-     // "DATAOVER": dataScanDiff,
+      "DATAOVER": dataScanOver,
     });
 
     try {
@@ -293,7 +307,6 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                             DataColumn(label: Text('ItemSKU Name')),
                             DataColumn(label: Text('Barcode')),
                             DataColumn(label: Text('QTY PO')),
-                            DataColumn(label: Text('QTY Scan')),
                             DataColumn(label: Text('Device Name')),
                           ],
                           rows: poDetails.map((detail) {
@@ -302,7 +315,6 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                               DataCell(Text(detail['item_name'] ?? '')),
                               DataCell(Text(detail['barcode'] ?? '')),
                               DataCell(Text(detail['qty_po'].toString())),
-                              DataCell(Text((detail['qty_scanned'] ?? 0).toString())),
                               DataCell(Text(detail['device_name'] ?? '')),
                          
                             ]);

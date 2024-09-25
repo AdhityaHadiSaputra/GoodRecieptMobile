@@ -1,10 +1,10 @@
-import 'dart:convert';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:intl/intl.dart';
 import 'package:metrox_po/drawer.dart';
 import 'package:metrox_po/models/db_helper.dart';
@@ -212,101 +212,297 @@ class _ScanQRPageState extends State<ScanQRPage> {
     });
   }
 
-  Future<void> checkAndSumQty(String scannedCode) async {
-    final item = detailPOData.firstWhereOrNull(
-      (item) =>
-          item['BARCODE'] == scannedCode ||
-          item['ITEMSKU'] == scannedCode ||
-          item['VENDORBARCODE'] == scannedCode,
-    );
-    final deviceInfoPlugin = DeviceInfoPlugin();
-    String deviceName = '';
+Future<void> checkAndSumQty(String scannedCode) async {
+  final deviceInfoPlugin = DeviceInfoPlugin();
+  String deviceName = '';
 
-    if (GetPlatform.isAndroid) {
-      final androidInfo = await deviceInfoPlugin.androidInfo;
-      deviceName = '${androidInfo.brand} ${androidInfo.model}';
-    } else if (GetPlatform.isIOS) {
-      final iosInfo = await deviceInfoPlugin.iosInfo;
-      deviceName = '${iosInfo.name} ${iosInfo.systemVersion}';
+  if (GetPlatform.isAndroid) {
+    final androidInfo = await deviceInfoPlugin.androidInfo;
+    deviceName = '${androidInfo.brand} ${androidInfo.model}';
+  } else if (GetPlatform.isIOS) {
+    final iosInfo = await deviceInfoPlugin.iosInfo;
+    deviceName = '${iosInfo.name} ${iosInfo.systemVersion}';
+  } else {
+    deviceName = 'Unknown Device';
+  }
+
+  // Try finding the item in the existing PO data
+  final itemInPO = detailPOData.firstWhereOrNull(
+    (item) => 
+        item['BARCODE'] == scannedCode || 
+        item['ITEMSKU'] == scannedCode || 
+        item['VENDORBARCODE'] == scannedCode
+  );
+
+  if (itemInPO != null) {
+    // Calculate quantities
+    int poQty = int.tryParse((itemInPO['QTYPO'] as String).replaceAll(formatQTYRegex, '')) ?? 0;
+    int scannedQty = scannedResults.isNotEmpty
+        ? scannedResults.length
+        : int.tryParse(itemInPO['QTYS']?.toString() ?? '0') ?? 0;
+    int currentQtyD = int.tryParse(itemInPO['QTYD']?.toString() ?? '0') ?? 0;
+
+    print("PO Qty: $poQty, Scanned Qty: $scannedQty, Current QtyD: $currentQtyD");
+
+    int newScannedQty = 1;
+
+    itemInPO['QTYS'] = newScannedQty > poQty ? poQty : newScannedQty;
+    itemInPO['QTYD'] = currentQtyD != 0
+        ? currentQtyD + 1
+        : newScannedQty > poQty
+            ? newScannedQty - poQty
+            : 0;
+
+    itemInPO['scandate'] = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+    setState(() {});
+
+    final mappedPO = {
+      'pono': _poNumberController.text.trim(),
+      'item_sku': itemInPO['ITEMSKU'],
+      'item_name': itemInPO['ITEMSKUNAME'],
+      'barcode': scannedCode,
+      'qty_po': itemInPO['QTYPO'],
+      'qty_scanned': newScannedQty,
+      'qty_different': itemInPO['QTYD'],
+      'device_name': deviceName,
+      'scandate': itemInPO['scandate'],
+      'user': userId,
+      'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
+      'status': itemInPO['QTYD'] != 0 ? 'different' : 'scanned',
+      'type': scannedPOType,
+    };
+
+    if (scannedQty < poQty) {
+      scannedResults.add(mappedPO);
     } else {
-      deviceName = 'Unknown Device';
+      print("Scanned qty exceeds PO qty.");
     }
 
-    if (item != null) {
-      int poQty = int.tryParse((item['QTYPO'] as String).replaceAll(formatQTYRegex, '')) ?? 0;
-      int scannedQty = scannedResults.isNotEmpty
-          ? scannedResults.length
-          : int.tryParse(item['QTYS']?.toString() ?? '0') ?? 0;
-      int currentQtyD = int.tryParse(item['QTYD']?.toString() ?? '0') ?? 0;
+    // Update the item in the PO and submit results
+    await Future.wait([
+      updatePO(itemInPO),
+      submitScannedResults(),
+    ]);
+  } else {
+    // If item not found in PO, check master items and handle accordingly
+    final masterItem = await fetchMasterItem(scannedCode);
+    print("Master item fetched: $masterItem");
 
-      int newScannedQty = scannedQty + 1;
-
-      item['QTYS'] = newScannedQty > poQty ? poQty : newScannedQty;
-      item['QTYD'] = currentQtyD != 0
-          ? currentQtyD + 1
-          : newScannedQty > poQty
-              ? newScannedQty - poQty
-              : 0;
-
-      item['scandate'] = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-      // Add to scanned results
-      setState(() {}); // Update UI
-
-      final mappedPO = {
+    if (masterItem != null) {
+      final mappedMasterItem = {
         'pono': _poNumberController.text.trim(),
-        'item_sku': item['ITEMSKU'],
-        'item_name': item['ITEMSKUNAME'],
+        'item_sku': masterItem['item_sku'],
+        'item_name': masterItem['item_name'],
         'barcode': scannedCode,
-        'qty_po': item['QTYPO'],
+        'qty_po': 0, 
         'qty_scanned': 1,
-        'qty_different': currentQtyD,
+        'qty_different': 0, 
         'device_name': deviceName,
-        'scandate': item['scandate'],
+        'scandate': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
         'user': userId,
-        'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0, // Add koli quantity
-        "status": item['QTYD'] != 0 ? "different" : 'scanned',
-        "type": scannedPOType
+        'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
+        'status': 'new',
+        'type': scannedPOType,
       };
 
-      if (scannedQty < poQty) {
-        scannedResults.add(mappedPO);
-      } else {
-        // differentScannedResults.add(mappedPO);
-      }
-
-      await Future.wait([
-        updatePO(item),
-        submitScannedResults(),
-      ]);
+      scannedResults.add(mappedMasterItem);
+      setState(() {});
+      await submitScannedResults();
     } else {
-      final masterItem = await fetchMasterItem(scannedCode);
-      if (masterItem != null) {
-        handleMasterItemScanned(masterItem, scannedCode);
+      // If item not found in both PO and Master items, prompt for manual input
+      final itemName = await _promptManualItemNameInput(scannedCode);
+
+      if (itemName != null && itemName.isNotEmpty) {
+        final manualMasterItem = {
+          'pono': _poNumberController.text.trim(),
+          'item_sku': '', // Using scannedCode as SKU, you can change this as needed
+          'item_name': itemName,
+          'barcode': scannedCode,
+          'qty_po': 0,
+          'qty_scanned': 1,
+          'qty_different': 0,
+          'device_name': deviceName,
+          'scandate': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+          'user': userId,
+          'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
+          'status': 'manual', // Indicate that this was manually added
+          'type': scannedPOType,
+        };
+
+        scannedResults.add(manualMasterItem);
+        setState(() {});
+        await submitScannedResults();
       } else {
-        _showErrorSnackBar('No matching item found in master item table');
+        print("Manual item name input was cancelled.");
       }
     }
   }
+}
 
-  void handleMasterItemScanned(
-      Map<String, dynamic> masterItem, String scannedCode) {
-    final existingItem =
-        notInPOItems.firstWhereOrNull((e) => e['VENDORBARCODE'] == scannedCode);
+// Function to prompt for manual item name input
+Future<String?> _promptManualItemNameInput(String scannedCode) async {
+   
+  return showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      String itemName = '';
 
-    if (existingItem != null) {
-      int scannedQty =
-          int.tryParse(existingItem['QTYS']?.toString() ?? '0') ?? 0;
-      existingItem['QTYS'] = scannedQty + 1; // Increment for not in PO items
-      existingItem['scandate'] =
-          DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-    } else {
-      masterItem['QTYS'] = 1; // New item
-      masterItem['scandate'] =
-          DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-      notInPOItems.add(masterItem);
-    }
-    setState(() {}); // Update UI
-  }
+      return AlertDialog(
+        title: Text('Enter Item Name'),
+        content: TextField(
+          onChanged: (value) {
+            itemName = value.trim();
+          },
+          decoration: InputDecoration(
+            labelText: 'Item Name',
+            hintText: 'Enter the name for item $scannedCode',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(null);
+            },
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(itemName);
+            },
+            child: Text('Save'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+
+// void _showManualEntryDialog(String scannedCode) {
+//   final TextEditingController itemSKUController = TextEditingController();
+//   final TextEditingController itemNameController = TextEditingController();
+//   final TextEditingController qtyController = TextEditingController();
+
+//   showDialog(
+//     context: context,
+//     builder: (BuildContext context) {
+//       return AlertDialog(
+//         title: const Text('Add Item Manually'),
+//         content: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             TextField(
+//               controller: itemSKUController,
+//               decoration: const InputDecoration(labelText: 'Item SKU'),
+//             ),
+//             TextField(
+//               controller: itemNameController,
+//               decoration: const InputDecoration(labelText: 'Item Name'),
+//             ),
+//             TextField(
+//               controller: qtyController,
+//               decoration: const InputDecoration(labelText: 'Quantity'),
+//               keyboardType: TextInputType.number,
+//             ),
+//           ],
+//         ),
+//         actions: [
+//           TextButton(
+//             onPressed: () {
+//               Navigator.of(context).pop();
+//             },
+//             child: const Text('Cancel'),
+//           ),
+//           TextButton(
+//             onPressed: () {
+//               final itemSKU = itemSKUController.text.trim();
+//               final itemName = itemNameController.text.trim();
+//               final qty = int.tryParse(qtyController.text.trim()) ?? 0;
+
+//               if (itemSKU.isNotEmpty && itemName.isNotEmpty && qty > 0) {
+//                 // Create a new item and add it to the scanned results
+//                 final newItem = {
+//                   'pono': _poNumberController.text.trim(),
+//                   'item_sku': itemSKU,
+//                   'item_name': itemName,
+//                   'barcode': scannedCode,
+//                   'qty_po': 0,
+//                   'qty_scanned': qty,
+//                   'qty_different': 0,
+//                   'device_name': 'Unknown Device', // You can replace this with the actual device name
+//                   'scandate': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+//                   'user': userId,
+//                   'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
+//                   'status': 'manual',
+//                   'type': scannedPOType, // Add your type if necessary
+//                 };
+
+//                 scannedResults.add(newItem);
+//                 setState(() {});
+//                 Navigator.of(context).pop();
+//                 ScaffoldMessenger.of(context).showSnackBar(
+//                   const SnackBar(content: Text('Item added manually')),
+//                 );
+//               } else {
+//                 ScaffoldMessenger.of(context).showSnackBar(
+//                   const SnackBar(content: Text('Please fill in all fields correctly')),
+//                 );
+//               }
+//             },
+//             child: const Text('Add Item'),
+//           ),
+//         ],
+//       );
+//     },
+//   );
+// }
+
+
+//   void handleMasterItemScanned(Map<String, dynamic> masterItem, String scannedCode) async {
+//   print("Handling master item: $masterItem for scanned code: $scannedCode");
+
+//   final deviceInfoPlugin = DeviceInfoPlugin();
+//   String deviceName = '';
+
+//   if (GetPlatform.isAndroid) {
+//     final androidInfo = await deviceInfoPlugin.androidInfo;
+//     deviceName = '${androidInfo.brand} ${androidInfo.model}';
+//   } else if (GetPlatform.isIOS) {
+//     final iosInfo = await deviceInfoPlugin.iosInfo;
+//     deviceName = '${iosInfo.name} ${iosInfo.systemVersion}';
+//   } else {
+//     deviceName = 'Unknown Device';
+//   }
+
+//   final mappedMasterItem = {
+//     'pono': _poNumberController.text.trim(),
+//     'item_sku': masterItem['ITEMSKU'],
+//     'item_name': masterItem['ITEMSKUNAME'],
+//     'barcode': scannedCode,
+//     'qty_po': 0, 
+//     'qty_scanned': 1,
+//     'qty_different': 0, 
+//     'device_name': deviceName,
+//     'scandate': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+//     'user': userId,
+//     'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
+//     'status': 'new',
+//     'type': scannedPOType,
+//   };
+
+//   scannedResults.add(mappedMasterItem);
+//   setState(() {
+    
+//   });
+
+//   print("New master item added to scanned results: $mappedMasterItem");
+
+//   await Future.wait([
+      
+//       submitScannedResults(),
+//     ]);
+// }
+
 
   Future<void> submitScannedResults() async {
     final allPOs = [...scannedResults, ...differentScannedResults];
@@ -319,48 +515,67 @@ class _ScanQRPageState extends State<ScanQRPage> {
     );
   }
 
- Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
-    const url = 'http://108.136.252.63:8080/pogr/getmaster.php';
-    const brand = 'YEC';
-    try {
-        var request = http.MultipartRequest('POST', Uri.parse(url));
-        request.fields['ACTION'] = 'GETITEM';
-        request.fields['BRAND'] = brand;
-        request.fields['VENDORBARCODE'] = scannedCode;
+Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
+  final db = await DatabaseHelper().database;
+  final result = await db.query(
+    'master_item',
+    where: 'barcode = ? OR item_sku = ? OR vendor_barcode = ?',
+    whereArgs: [scannedCode, scannedCode, scannedCode],
+  );
 
-        print('Sending request with:');
-        print('ACTION: GETITEM');
-        print('BRAND: $brand');
-        print('VENDORBARCODE: $scannedCode');
-
-        var response = await request.send();
-
-        if (response.statusCode == 200) {
-            var responseData = await response.stream.bytesToString();
-            print('Response data: $responseData'); // Tambahkan ini
-            var jsonResponse = json.decode(responseData);
-
-            if (jsonResponse['code'] == '1' && jsonResponse['msg'] is List) {
-                List<dynamic> itemList = jsonResponse['msg'];
-                if (itemList.isNotEmpty) {
-                    var item = itemList.first as Map<String, dynamic>;
-                    item['scandate'] = DateTime.now(); // Tambahkan scandate
-                    return item;
-                } else {
-                    print('No items found in response');
-                }
-            } else {
-                print('Unexpected response format: $jsonResponse');
-            }
-        } else {
-            print('Request failed with status: ${response.statusCode}');
-        }
-        return null;
-    } catch (error) {
-        _showErrorSnackBar('Error fetching master item: $error');
-        return null;
-    }
+  if (result.isNotEmpty) {
+    print("Fetched data from database: $result"); // Check if this contains the required fields
+    return result.first;
+  } else {
+    print("No data found for the scanned code: $scannedCode");
+    return null;
+  }
 }
+
+
+
+//  Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
+//     const url = 'http://108.136.252.63:8080/pogr/getmaster.php';
+//     const brand = 'YEC';
+//     try {
+//         var request = http.MultipartRequest('POST', Uri.parse(url));
+//         request.fields['ACTION'] = 'GETITEM';
+//         request.fields['BRAND'] = brand;
+//         request.fields['VENDORBARCODE'] = scannedCode;
+
+//         print('Sending request with:');
+//         print('ACTION: GETITEM');
+//         print('BRAND: $brand');
+//         print('VENDORBARCODE: $scannedCode');
+
+//         var response = await request.send();
+
+//         if (response.statusCode == 200) {
+//             var responseData = await response.stream.bytesToString();
+//             print('Response data: $responseData'); // Tambahkan ini
+//             var jsonResponse = json.decode(responseData);
+
+//             if (jsonResponse['code'] == '1' && jsonResponse['msg'] is List) {
+//                 List<dynamic> itemList = jsonResponse['msg'];
+//                 if (itemList.isNotEmpty) {
+//                     var item = itemList.first as Map<String, dynamic>;
+//                     item['scandate'] = DateTime.now(); // Tambahkan scandate
+//                     return item;
+//                 } else {
+//                     print('No items found in response');
+//                 }
+//             } else {
+//                 print('Unexpected response format: $jsonResponse');
+//             }
+//         } else {
+//             print('Request failed with status: ${response.statusCode}');
+//         }
+//         return null;
+//     } catch (error) {
+//         _showErrorSnackBar('Error fetching master item: $error');
+//         return null;
+//     }
+// }
 
   Future<void> updatePO(Map<String, dynamic> item) async {
     detailPOData = detailPOData.replaceOrAdd(
@@ -451,9 +666,6 @@ class _ScanQRPageState extends State<ScanQRPage> {
                                       DataColumn(label: Text('Item Name')),
                                       DataColumn(label: Text('Barcode')),
                                       DataColumn(label: Text('Qty PO')),
-                                      DataColumn(label: Text('Qty Scan')),
-                                      DataColumn(label: Text('Qty Diff')),
-
                                     ],
                                     rows: detailPOData
                                         .map(
@@ -469,8 +681,6 @@ class _ScanQRPageState extends State<ScanQRPage> {
                                                   e['BARCODE']?.toString() ??
                                                       '')),
                                             DataCell(Text((e['QTYPO'] as String).replaceAll(formatQTYRegex, ''))),
-                                            DataCell(Text(e['QTYS']?.toString() ?? '0')), // Scanned quantity
-                                            DataCell(Text(e['QTYD']?.toString() ?? '0')), // Quantity difference
                                             ],
                                           ),
                                         )

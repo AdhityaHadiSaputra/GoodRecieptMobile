@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:metrox_po/main_layout.dart';
 import 'package:metrox_po/models/db_helper.dart';
 import 'package:metrox_po/screens/dashboard.dart';
-import 'package:device_info_plus/device_info_plus.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Ensures Flutter is fully initialized
   final DatabaseHelper db = DatabaseHelper(); // Initialize DatabaseHelper
 
-  // Perform any database setup or checks if needed
   await db.checkTable(); // Ensure the table is created if not exists
 
   runApp(MyApp());

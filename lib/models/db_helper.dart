@@ -81,6 +81,17 @@ class DatabaseHelper {
         )
         ''',
       );
+       await db.execute(
+        '''
+        CREATE TABLE master_item(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_sku TEXT,
+          item_name TEXT,
+          barcode TEXT,
+          vendor_barcode TEXT
+        )
+        ''',
+      );
     } catch (e) {
       print('Error creating tables: $e');
     }
@@ -153,36 +164,70 @@ class DatabaseHelper {
     return result.isNotEmpty;
   }
 
-  Future<void> insertOrUpdateScannedResults(Map<String, dynamic> poData) async {
-  final db = await database;
+    Future<void> insertOrUpdateScannedResults(Map<String, dynamic> poData) async {
+    final db = await database;
 
-  bool exists = await poScannedExists(
-    poData['pono'], 
-    poData['barcode'], 
-    poData['scandate'],
-  );
-  
-  poData["type"] = scannedPOType; // Ensure this variable is defined somewhere in your code
+    bool exists = await poScannedExists(
+        poData['pono'], poData['barcode'], poData['scandate']);
+    final mappedPOData = {...poData, "type": scannedPOType};
+    // poData["type"] = scannedPOType;
+    // await db.insert('scanned_results', poData);
 
-  if (exists) {
-    await db.update(
-      'scanned_results',
-      poData,
-      where: 'pono = ? AND barcode = ? AND type = ? AND scandate = ?',
-      whereArgs: [
-        poData['pono'],
-        poData['barcode'],
-        scannedPOType,
-        poData['scandate'],
-      ],
-    );
-    print('CEKK PO updated: ${poData['pono']} - Barcode: ${poData['barcode']} - Scandate: ${poData['scandate']}');
-  } else {
-    await db.insert('scanned_results', poData);
-    print('CEKK PO inserted: ${poData['pono']} - Barcode: ${poData['barcode']} - Scandate: ${poData['scandate']}');
+    if (exists) {
+      await db.update(
+        'scanned_results',
+        mappedPOData,
+        where: 'pono = ? AND barcode = ? AND type = ? AND scandate = ?',
+        whereArgs: [
+          mappedPOData['pono'],
+          mappedPOData['barcode'],
+          scannedPOType,
+          mappedPOData['scandate']
+        ],
+      );
+      print(
+          'CEKK PO updated: ${mappedPOData['pono']} - Barcode: ${mappedPOData['barcode']} - Scandate: ${mappedPOData['scandate']}');
+    } else {
+      await db.insert('scanned_results', mappedPOData);
+      print(
+          'CEKK PO inserted: ${mappedPOData['pono']} - Barcode: ${mappedPOData['barcode']} - Scandate: ${mappedPOData['scandate']}');
+    }
   }
+  
+  Future<void> bulkInsertOrUpdateMasterItems(List<Map<String, dynamic>> masterItems) async {
+  final db = await DatabaseHelper().database;
+
+  // Perform bulk insert/update within a transaction for efficiency
+  await db.transaction((txn) async {
+    for (var masterItem in masterItems) {
+      final result = await txn.query(
+        'master_item',
+        where: 'item_sku = ?',
+        whereArgs: [masterItem['item_sku']],
+      );
+
+      if (result.isNotEmpty) {
+        // Update existing item
+        await txn.update(
+          'master_item',
+          masterItem,
+          where: 'item_sku = ?',
+          whereArgs: [masterItem['item_sku']],
+        );
+      } else {
+        // Insert new item
+        await txn.insert('master_item', masterItem);
+      }
+    }
+  });
 }
 
+
+
+Future<void> clearMasterItems() async {
+  final db = await database; // Get the database instance
+  await db.delete('master_item'); // Replace 'master_items' with your table name
+}
 
   Future<void> clearScannedResults() async {
     final db = await database;
@@ -204,6 +249,8 @@ class DatabaseHelper {
       whereArgs: [poData['id'], inputPOType],
     );
   }
+
+  
   
 
   Future<void> printScannedResults() async {
@@ -234,6 +281,7 @@ class DatabaseHelper {
     );
     return result.isNotEmpty;
   }
+
 
   Future<void> insertOrUpdatePO(Map<String, dynamic> poData) async {
     final db = await database;
@@ -282,6 +330,7 @@ class DatabaseHelper {
       whereArgs: [poNumber],
     );
   }
+  
 
   Future<List<Map<String, dynamic>>> getPOResultScannedDetails(
       String poNumber) async {
@@ -334,6 +383,7 @@ class DatabaseHelper {
       whereArgs: [poNumber, inputPOType],
     );
   }
+  
 
   Future<void>  deletePOResult(String poNumber, String scandate) async {
     final db = await database;
@@ -352,7 +402,14 @@ class DatabaseHelper {
       whereArgs: [poNumber, scannedPOType],
     );
   }
-
+ Future<void> deleteMasterItem(String itemSKU) async {
+    final db = await database;
+    await db.delete(
+      'master_item',
+      where: 'item_sku = ?',
+      whereArgs: [itemSKU],
+    );
+  }
   Future<void> updatePOItem(
       String poNumber, String barcode, int qtyScanned, int qtyDifferent) async {
     final db = await database;
@@ -366,4 +423,13 @@ class DatabaseHelper {
       whereArgs: [poNumber, barcode, inputPOType],
     );
   }
+Future<List<Map<String, dynamic>>> getAllMasterItems() async {
+  final db = await database;
+  final result = await db.query('master_item');
+  print('Fetched Items: $result');
+  return result.isNotEmpty ? result : [];
+}
+
+
+ 
 }
