@@ -33,7 +33,7 @@ class _MainLayoutState extends State<MainLayout> {
           children: [
             // Background Image
             Image.asset(
-              'assets/MOBILE.png',
+              'assets/MOBILE2.png',
               fit: BoxFit.contain,
             ),
             // PageView

@@ -26,6 +26,7 @@ class _PODetailPageState extends State<PODetailPage> {
   final ApiService apiservice = ApiService();
   List<Map<String, dynamic>> poDetails = [];
   List<Map<String, dynamic>> scannedResults = [];
+  List<Map<String, dynamic>> noitemScannedResults = [];
   // List<Map<String, dynamic>> scannedOverResults = [];
   bool isLoading = true;
   final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
@@ -38,6 +39,7 @@ class _PODetailPageState extends State<PODetailPage> {
     super.initState();
     fetchPODetails();
     fetchScannedResults();
+    fetchNoItemsResults();
     // fetchScannedOverResults();
     fetchData(); // Fetch user data and set userId
   }
@@ -82,6 +84,16 @@ class _PODetailPageState extends State<PODetailPage> {
       final results = await dbHelper.getScannedPODetails(widget.poNumber);
       setState(() {
         scannedResults = results;
+      });
+    } catch (e) {
+      print('Error fetching scanned results: $e');
+    }
+  }
+  Future<void> fetchNoItemsResults() async {
+    try {
+      final results = await dbHelper.getScannedNoItemsDetails(widget.poNumber);
+      setState(() {
+        noitemScannedResults = results;
       });
     } catch (e) {
       print('Error fetching scanned results: $e');
@@ -194,10 +206,16 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
   // Refresh data in the UI
   fetchPODetails();
   fetchScannedResults();
+  fetchNoItemsResults();
 }
 
   void _deleteScannedResult(String scandate) async {
     await dbHelper.deletePOResult(widget.poNumber, scandate);
+    fetchScannedResults();
+    // fetchScannedOverResults();
+  }
+  void _deleteScannedNoItemResult(String scandate) async {
+    await dbHelper.deletePONoItemResult(widget.poNumber, scandate);
     fetchScannedResults();
     // fetchScannedOverResults();
   }
@@ -238,10 +256,10 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
 
       };
     }).toList();
-    List<Map<String, dynamic>> dataScanOver = scannedResults.map((item) {
+    List<Map<String, dynamic>> dataScanOver = noitemScannedResults.map((item) {
       return {
         "pono": item['pono'],
-        "itemsku": '',
+        "itemsku": '-',
         "skuname": item['item_name'],
         "barcode": item['vendorbarcode'] ?? '',
         "vendorbarcode": item['barcode'],
@@ -374,6 +392,63 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                                       child: Icon(Icons.delete),
                                     ),
                                     
+                            ])
+                              )
+                            ]);
+                          }).toList(),
+                        ),
+                        
+                      ),
+                      SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          columns: const [
+                            DataColumn(label: Text('PONO')),
+                            DataColumn(label: Text('Item SKU')),
+                            DataColumn(label: Text('Item SKU Name')),
+                            DataColumn(label: Text('Barcode')),
+                            DataColumn(label: Text('VendorBarcode')),
+                            DataColumn(label: Text('QTY')),
+                            DataColumn(label: Text('AudUser')),
+                            DataColumn(label: Text('type')),
+                            DataColumn(label: Text('AudDate')),
+                            DataColumn(label: Text('MachineCd')),
+                            DataColumn(label: Text('QTY Koli')),
+                            DataColumn(label: Text('Actions')),
+                          ],
+                          rows: noitemScannedResults.map((detail) {
+                            return DataRow(cells: [
+                              DataCell(Text(detail['pono'] ?? '')),
+                              DataCell(Text(detail['item_sku'] ?? '')),
+                              DataCell(Text(detail['item_name'] ?? '')),
+                              DataCell(Text(detail['vendorbarcode'] ?? '')),
+                              DataCell(Text(detail['barcode'] ?? '')),
+                              DataCell(Text((detail['qty_scanned'] ?? 0)
+                                  .toString())),
+                              DataCell(Text(detail['user'] ?? '')),
+                              DataCell(Text(detail['type'] ?? '')),
+                              DataCell(Text(detail['scandate'] != null
+                                  ? DateFormat('yyyy-MM-dd HH:mm:ss')
+                                      .format(DateTime.parse(detail['scandate']))
+                                  : '')),
+                              DataCell(Text(detail['device_name'] ?? '')),
+                              DataCell(Text((detail['qty_koli'] ?? 0).toString())),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        _deleteScannedNoItemResult(
+                                            detail['scandate'] ?? '');
+                                      },
+                                      child: Icon(Icons.delete),
+                                    ),
+                                    
                                     
                             ])
                               )
@@ -395,7 +470,12 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                     ],
                   ),
                 ),
-                  ])));
+                  ]))
+                    ]
+                  )
+              )
+    );
+  
               
     
   }

@@ -36,6 +36,7 @@ class _ScanQRPageState extends State<ScanQRPage> {
   List<Map<String, dynamic>> notInPOItems =[]; 
   List<Map<String, dynamic>> scannedResults = []; 
   List<Map<String, dynamic>> differentScannedResults =[]; 
+  List<Map<String, dynamic>> noitemScannedResults =[]; 
   bool isLoading = false;
   final TextEditingController _poNumberController =TextEditingController();
       //TextEditingController(text: "PO/YEC/2409/0001");
@@ -108,9 +109,12 @@ class _ScanQRPageState extends State<ScanQRPage> {
             await dbHelper.getPOResultScannedDetails(headerPO[0]['PONO']);
         final differentPOs =
             await dbHelper.getPODifferentScannedDetails(headerPO[0]['PONO']);
+        final noitemScanned =
+            await dbHelper.getPONOItemsScannedDetails(headerPO[0]['PONO']);
 
         scannedResults = [...scannedPOs];
         differentScannedResults = [...differentPOs];
+        noitemScannedResults = [...noitemScanned];
         final detailPOList = List<Map<String, dynamic>>.from(msg['DetailPO']);
 
         setState(() {
@@ -329,9 +333,9 @@ Future<void> checkAndSumQty(String scannedCode) async {
           'type': scannedPOType,
         };
 
-        scannedResults.add(manualMasterItem);
+        noitemScannedResults.add(manualMasterItem);
         setState(() {});
-        await submitScannedResults();
+        await submitScannedNoItemsResults();
       } else {
         print("Manual item name input was cancelled.");
       }
@@ -377,141 +381,24 @@ Future<String?> _promptManualItemNameInput(String scannedCode) async {
   );
 }
 
-
-// void _showManualEntryDialog(String scannedCode) {
-//   final TextEditingController itemSKUController = TextEditingController();
-//   final TextEditingController itemNameController = TextEditingController();
-//   final TextEditingController qtyController = TextEditingController();
-
-//   showDialog(
-//     context: context,
-//     builder: (BuildContext context) {
-//       return AlertDialog(
-//         title: const Text('Add Item Manually'),
-//         content: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             TextField(
-//               controller: itemSKUController,
-//               decoration: const InputDecoration(labelText: 'Item SKU'),
-//             ),
-//             TextField(
-//               controller: itemNameController,
-//               decoration: const InputDecoration(labelText: 'Item Name'),
-//             ),
-//             TextField(
-//               controller: qtyController,
-//               decoration: const InputDecoration(labelText: 'Quantity'),
-//               keyboardType: TextInputType.number,
-//             ),
-//           ],
-//         ),
-//         actions: [
-//           TextButton(
-//             onPressed: () {
-//               Navigator.of(context).pop();
-//             },
-//             child: const Text('Cancel'),
-//           ),
-//           TextButton(
-//             onPressed: () {
-//               final itemSKU = itemSKUController.text.trim();
-//               final itemName = itemNameController.text.trim();
-//               final qty = int.tryParse(qtyController.text.trim()) ?? 0;
-
-//               if (itemSKU.isNotEmpty && itemName.isNotEmpty && qty > 0) {
-//                 // Create a new item and add it to the scanned results
-//                 final newItem = {
-//                   'pono': _poNumberController.text.trim(),
-//                   'item_sku': itemSKU,
-//                   'item_name': itemName,
-//                   'barcode': scannedCode,
-//                   'qty_po': 0,
-//                   'qty_scanned': qty,
-//                   'qty_different': 0,
-//                   'device_name': 'Unknown Device', // You can replace this with the actual device name
-//                   'scandate': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
-//                   'user': userId,
-//                   'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
-//                   'status': 'manual',
-//                   'type': scannedPOType, // Add your type if necessary
-//                 };
-
-//                 scannedResults.add(newItem);
-//                 setState(() {});
-//                 Navigator.of(context).pop();
-//                 ScaffoldMessenger.of(context).showSnackBar(
-//                   const SnackBar(content: Text('Item added manually')),
-//                 );
-//               } else {
-//                 ScaffoldMessenger.of(context).showSnackBar(
-//                   const SnackBar(content: Text('Please fill in all fields correctly')),
-//                 );
-//               }
-//             },
-//             child: const Text('Add Item'),
-//           ),
-//         ],
-//       );
-//     },
-//   );
-// }
-
-
-//   void handleMasterItemScanned(Map<String, dynamic> masterItem, String scannedCode) async {
-//   print("Handling master item: $masterItem for scanned code: $scannedCode");
-
-//   final deviceInfoPlugin = DeviceInfoPlugin();
-//   String deviceName = '';
-
-//   if (GetPlatform.isAndroid) {
-//     final androidInfo = await deviceInfoPlugin.androidInfo;
-//     deviceName = '${androidInfo.brand} ${androidInfo.model}';
-//   } else if (GetPlatform.isIOS) {
-//     final iosInfo = await deviceInfoPlugin.iosInfo;
-//     deviceName = '${iosInfo.name} ${iosInfo.systemVersion}';
-//   } else {
-//     deviceName = 'Unknown Device';
-//   }
-
-//   final mappedMasterItem = {
-//     'pono': _poNumberController.text.trim(),
-//     'item_sku': masterItem['ITEMSKU'],
-//     'item_name': masterItem['ITEMSKUNAME'],
-//     'barcode': scannedCode,
-//     'qty_po': 0, 
-//     'qty_scanned': 1,
-//     'qty_different': 0, 
-//     'device_name': deviceName,
-//     'scandate': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
-//     'user': userId,
-//     'qty_koli': int.tryParse(_koliController.text.trim()) ?? 0,
-//     'status': 'new',
-//     'type': scannedPOType,
-//   };
-
-//   scannedResults.add(mappedMasterItem);
-//   setState(() {
-    
-//   });
-
-//   print("New master item added to scanned results: $mappedMasterItem");
-
-//   await Future.wait([
-      
-//       submitScannedResults(),
-//     ]);
-// }
-
-
   Future<void> submitScannedResults() async {
-    final allPOs = [...scannedResults, ...differentScannedResults];
+    final allPOs = [...scannedResults, ...differentScannedResults, ...noitemScannedResults];
     for (var result in allPOs) {
       await dbHelper.insertOrUpdateScannedResults(
           result); // Assuming you have a method for this
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Scanned results saved successfully')),
+    );
+  }
+  Future<void> submitScannedNoItemsResults() async {
+    final allPOs = [...noitemScannedResults];
+    for (var result in allPOs) {
+      await dbHelper.insertOrUpdateScannedNoItemsResults(
+          result); // Assuming you have a method for this
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Scanned No Item results saved successfully')),
     );
   }
 
@@ -532,50 +419,6 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
   }
 }
 
-
-
-//  Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
-//     const url = 'http://108.136.252.63:8080/pogr/getmaster.php';
-//     const brand = 'YEC';
-//     try {
-//         var request = http.MultipartRequest('POST', Uri.parse(url));
-//         request.fields['ACTION'] = 'GETITEM';
-//         request.fields['BRAND'] = brand;
-//         request.fields['VENDORBARCODE'] = scannedCode;
-
-//         print('Sending request with:');
-//         print('ACTION: GETITEM');
-//         print('BRAND: $brand');
-//         print('VENDORBARCODE: $scannedCode');
-
-//         var response = await request.send();
-
-//         if (response.statusCode == 200) {
-//             var responseData = await response.stream.bytesToString();
-//             print('Response data: $responseData'); // Tambahkan ini
-//             var jsonResponse = json.decode(responseData);
-
-//             if (jsonResponse['code'] == '1' && jsonResponse['msg'] is List) {
-//                 List<dynamic> itemList = jsonResponse['msg'];
-//                 if (itemList.isNotEmpty) {
-//                     var item = itemList.first as Map<String, dynamic>;
-//                     item['scandate'] = DateTime.now(); // Tambahkan scandate
-//                     return item;
-//                 } else {
-//                     print('No items found in response');
-//                 }
-//             } else {
-//                 print('Unexpected response format: $jsonResponse');
-//             }
-//         } else {
-//             print('Request failed with status: ${response.statusCode}');
-//         }
-//         return null;
-//     } catch (error) {
-//         _showErrorSnackBar('Error fetching master item: $error');
-//         return null;
-//     }
-// }
 
   Future<void> updatePO(Map<String, dynamic> item) async {
     detailPOData = detailPOData.replaceOrAdd(
@@ -735,6 +578,22 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
                   ),
                 ),
                 ...differentScannedResults.map(
+                  (result) => DataRow(
+                    cells: [
+                      DataCell(Text(result['pono'] ?? '')),
+                      DataCell(Text(result['item_sku'] ?? '')),
+                      DataCell(Text(result['item_name'] ?? '')),
+                      DataCell(Text(result['barcode'] ?? '')),
+                      DataCell(Text(result['qty_scanned'].toString())),
+                      DataCell(Text(result['user'] ?? '')),
+                      DataCell(Text(result['device_name'] ?? '')),
+                      DataCell(Text(result['qty_koli'].toString())),
+                      DataCell(Text(result['scandate'] ?? '')),
+                     
+                    ],
+                  ),
+                ),
+                ...noitemScannedResults.map(
                   (result) => DataRow(
                     cells: [
                       DataCell(Text(result['pono'] ?? '')),

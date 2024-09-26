@@ -39,7 +39,7 @@ class _AuthpageState extends State<Authpage> {
               children: <Widget>[
                Align(
                     alignment: Alignment.topCenter,
-                    child:Image(image: AssetImage('assets/logo.png'))),
+                    child:Image(image: AssetImage('assets/Metrox1.png'))),
                 SizedBox(height: 30,),
                 Align(
                   alignment: Alignment.center,
