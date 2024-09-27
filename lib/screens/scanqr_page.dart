@@ -1,4 +1,5 @@
 
+import 'package:another_flushbar/flushbar.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -39,12 +40,13 @@ class _ScanQRPageState extends State<ScanQRPage> {
   List<Map<String, dynamic>> noitemScannedResults =[]; 
   bool isLoading = false;
   final TextEditingController _poNumberController =TextEditingController();
+  final TextEditingController _barcodeController = TextEditingController();
       //TextEditingController(text: "PO/YEC/2409/0001");
    final TextEditingController _koliController = TextEditingController(); 
   QRViewController? controller;
   String scannedBarcode = "";
   late String userId = '';
-
+  FocusNode textsecond = FocusNode();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
@@ -190,9 +192,16 @@ class _ScanQRPageState extends State<ScanQRPage> {
       await dbHelper.insertOrUpdatePO(poData);
     }
     // !UNCOMMENT THIS CODE
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PO data saved')),
-    );
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   const SnackBar(content: Text('PO data saved')),
+    // );
+    Flushbar(
+        message: 'Po Data Save',
+        duration: Duration(seconds: 3),
+        flushbarPosition: FlushbarPosition.TOP,
+        backgroundColor: Colors.green,
+    ).show(context);
+
   }
 
   void _onQRViewCreated(QRViewController qrController) {
@@ -387,6 +396,7 @@ Future<String?> _promptManualItemNameInput(String scannedCode) async {
       await dbHelper.insertOrUpdateScannedResults(
           result); // Assuming you have a method for this
     }
+    
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Scanned results saved successfully')),
     );
@@ -450,44 +460,102 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
           child: Column(
             children: [
               Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _poNumberController,
-                      decoration: const InputDecoration(
-                        labelText: 'Enter PO Number',
-                        border: OutlineInputBorder(),
-                      ),
-                      inputFormatters: [UpperCaseTextFormatter()],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: () {
-                      String poNumber = _poNumberController.text.trim();
-                      if (poNumber.isNotEmpty) {
-                        fetchPOData(poNumber);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a valid PO number'),
-                          ),
-                        );
-                      }
-                    },
-                    child: const Icon(Icons.search),
-                  ),
-                ],
-              ),
-               const SizedBox(height: 20),
-            TextFormField(
+  children: [
+    Expanded(
+      child: TextFormField(
+        controller: _poNumberController,
+        decoration: const InputDecoration(
+          labelText: 'Enter PO Number',
+          border: OutlineInputBorder(),
+        ),
+        inputFormatters: [UpperCaseTextFormatter()],
+      ),
+    ),
+    const SizedBox(width: 10),
+    SizedBox(
+      width: 75,
+      child: TextFormField(
               controller: _koliController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Enter Koli Quantity',
+                labelText: 'Koli',
                 border: OutlineInputBorder(),
               ),
             ),
+    ),
+    ElevatedButton(
+      onPressed: () {
+        String poNumber = _poNumberController.text.trim();
+        if (poNumber.isNotEmpty) {
+          fetchPOData(poNumber);
+        } else {
+          Flushbar(
+        message: 'Please enter a valid PO number',
+        duration: Duration(seconds: 3),
+        flushbarPosition: FlushbarPosition.TOP,
+        backgroundColor: Colors.red,
+    ).show(context);
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //   const SnackBar(
+          //     content: Text('Please enter a valid PO number'),
+          //   ),
+          // );
+        }
+      },
+      child: const Icon(Icons.search),
+    ),
+  ],
+),
+               const SizedBox(height: 20),
+            
+            TextFormField(
+              controller: _barcodeController,
+              decoration: const InputDecoration(
+                labelText: 'Enter Barcode',
+                border: OutlineInputBorder(),
+              ),
+              // Detect when "Enter" is pressed on keyboard
+              focusNode: textsecond,
+              onFieldSubmitted: (value) 
+              
+              {
+                FocusScope.of(context).requestFocus(textsecond);
+                
+                if (value.isNotEmpty) {
+                  checkAndSumQty(value);
+                   Future.delayed(Duration(milliseconds: 100), () {
+                  _barcodeController.clear(); 
+      }
+      );
+                } else {
+                  Flushbar(
+        message: 'Please enter a valid barcode',
+        duration: Duration(seconds: 3),
+        flushbarPosition: FlushbarPosition.TOP,
+        backgroundColor: Colors.red,
+    ).show(context);
+                  // ScaffoldMessenger.of(context).showSnackBar(
+                  //   const SnackBar(
+                  //     content: Text('Please enter a valid barcode'),
+                  //   ),
+                  // );
+                }
+              },
+        inputFormatters: [UpperCaseTextFormatter()],
+         
+            ),
+          // TextFormField(
+          //   controller: _barcodeController,
+          //   decoration: const InputDecoration(
+          //     labelText: 'Enter Barcode',
+          //     border: OutlineInputBorder(),
+          //   ),
+          //   onChanged: (value) {
+          //     if (value.isNotEmpty) {
+          //       checkAndSumQty(value);
+          //     }
+          //   },
+          // ),
               const SizedBox(height: 20),
               isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -633,6 +701,9 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
             );
             return;
           }
+          // checkAndSumQty("S54227417345001");
+          
+
 
           Navigator.push(
             context,

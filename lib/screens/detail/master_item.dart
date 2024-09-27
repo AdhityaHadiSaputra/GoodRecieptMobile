@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:metrox_po/api_service.dart';
 import 'package:metrox_po/models/db_helper.dart';
 
@@ -164,6 +165,8 @@ class _MasterItemPageState extends State<MasterItemPage> {
                 ),
               ),
               onSubmitted: (_) => searchItems(),
+        inputFormatters: [UpperCaseTextFormatter()],
+
             ),
           ),
           ElevatedButton(
@@ -262,6 +265,18 @@ class _MasterItemPageState extends State<MasterItemPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }
