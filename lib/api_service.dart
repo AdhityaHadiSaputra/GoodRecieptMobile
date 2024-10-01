@@ -23,15 +23,7 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         Map<String, dynamic> result = jsonDecode(response.body);
-        
-        // Assume the user ID is part of the response
-        String userId = result['userId']; // Adjust based on your actual response structure
-
-        // Return both the user ID and any other required data
-        return {
-          'userId': userId,
-          ...result // Other login data
-        };
+        return result;
       } else {
         throw Exception('Failed to login');
       }
