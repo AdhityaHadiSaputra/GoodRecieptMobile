@@ -9,7 +9,6 @@ class APIUrl{
   static String MASTER_URL = '$BASE_URL/getmaster.php';
 }
 
-
 class ApiService {
   Future<Map<String, dynamic>> loginUser(
       String USERID, String USERPASSWORD) async {
@@ -24,7 +23,15 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         Map<String, dynamic> result = jsonDecode(response.body);
-        return result;
+        
+        // Assume the user ID is part of the response
+        String userId = result['userId']; // Adjust based on your actual response structure
+
+        // Return both the user ID and any other required data
+        return {
+          'userId': userId,
+          ...result // Other login data
+        };
       } else {
         throw Exception('Failed to login');
       }
@@ -34,6 +41,7 @@ class ApiService {
     }
   }
 }
+
 
 class Apiuser {
  

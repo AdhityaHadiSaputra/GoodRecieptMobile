@@ -191,10 +191,6 @@ class _ScanQRPageState extends State<ScanQRPage> {
 
       await dbHelper.insertOrUpdatePO(poData);
     }
-    // !UNCOMMENT THIS CODE
-    // ScaffoldMessenger.of(context).showSnackBar(
-    //   const SnackBar(content: Text('PO data saved')),
-    // );
     Flushbar(
         message: 'Po Data Save',
         duration: Duration(seconds: 3),
@@ -226,7 +222,7 @@ class _ScanQRPageState extends State<ScanQRPage> {
   }
 
 Future<void> checkAndSumQty(String scannedCode) async {
-  final deviceInfoPlugin = DeviceInfoPlugin();
+   final deviceInfoPlugin = DeviceInfoPlugin();
   String deviceName = '';
 
   if (GetPlatform.isAndroid) {
@@ -250,26 +246,31 @@ Future<void> checkAndSumQty(String scannedCode) async {
   if (itemInPO != null) {
     // Calculate quantities
     int poQty = int.tryParse((itemInPO['QTYPO'] as String).replaceAll(formatQTYRegex, '')) ?? 0;
-    int scannedQty = scannedResults.isNotEmpty
-        ? scannedResults.length
-        : int.tryParse(itemInPO['QTYS']?.toString() ?? '0') ?? 0;
+    int scannedQty = int.tryParse(itemInPO['QTYS']?.toString() ?? '0') ?? 0;
     int currentQtyD = int.tryParse(itemInPO['QTYD']?.toString() ?? '0') ?? 0;
 
     print("PO Qty: $poQty, Scanned Qty: $scannedQty, Current QtyD: $currentQtyD");
 
     int newScannedQty = 1;
 
-    itemInPO['QTYS'] = newScannedQty > poQty ? poQty : newScannedQty;
-    itemInPO['QTYD'] = currentQtyD != 0
-        ? currentQtyD + 1
-        : newScannedQty > poQty
-            ? newScannedQty - poQty
-            : 0;
+    // Prevent over-scanning beyond the PO quantity
+    if (newScannedQty > poQty) {
+      print("Scanned qty exceeds PO qty.");
+      return; // Early return to prevent further processing
+    }
 
+    // Update item quantities
+    itemInPO['QTYS'] = newScannedQty;
+    itemInPO['QTYD'] = newScannedQty < poQty ? poQty - newScannedQty : 0;
+
+    // Update the scan date
     itemInPO['scandate'] = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
     setState(() {});
 
+    
+    // Map the scanned PO data
     final mappedPO = {
+      
       'pono': _poNumberController.text.trim(),
       'item_sku': itemInPO['ITEMSKU'],
       'item_name': itemInPO['ITEMSKUNAME'],
@@ -285,11 +286,8 @@ Future<void> checkAndSumQty(String scannedCode) async {
       'type': scannedPOType,
     };
 
-    if (scannedQty < poQty) {
-      scannedResults.add(mappedPO);
-    } else {
-      print("Scanned qty exceeds PO qty.");
-    }
+    // Add to scanned results
+    scannedResults.add(mappedPO);
 
     // Update the item in the PO and submit results
     await Future.wait([
@@ -318,9 +316,9 @@ Future<void> checkAndSumQty(String scannedCode) async {
         'type': scannedPOType,
       };
 
-      scannedResults.add(mappedMasterItem);
+      noitemScannedResults.add(mappedMasterItem);
       setState(() {});
-      await submitScannedResults();
+      await submitScannedNoItemsResults();
     } else {
       // If item not found in both PO and Master items, prompt for manual input
       final itemName = await _promptManualItemNameInput(scannedCode);
@@ -328,7 +326,7 @@ Future<void> checkAndSumQty(String scannedCode) async {
       if (itemName != null && itemName.isNotEmpty) {
         final manualMasterItem = {
           'pono': _poNumberController.text.trim(),
-          'item_sku': '', // Using scannedCode as SKU, you can change this as needed
+          'item_sku': '-', // Using scannedCode as SKU, you can change this as needed
           'item_name': itemName,
           'barcode': scannedCode,
           'qty_po': 0,
@@ -391,7 +389,7 @@ Future<String?> _promptManualItemNameInput(String scannedCode) async {
 }
 
   Future<void> submitScannedResults() async {
-    final allPOs = [...scannedResults, ...differentScannedResults, ...noitemScannedResults];
+    final allPOs = [...scannedResults];
     for (var result in allPOs) {
       await dbHelper.insertOrUpdateScannedResults(
           result); // Assuming you have a method for this
@@ -402,7 +400,7 @@ Future<String?> _promptManualItemNameInput(String scannedCode) async {
     );
   }
   Future<void> submitScannedNoItemsResults() async {
-    final allPOs = [...noitemScannedResults];
+    final allPOs = [...differentScannedResults, ...noitemScannedResults];
     for (var result in allPOs) {
       await dbHelper.insertOrUpdateScannedNoItemsResults(
           result); // Assuming you have a method for this
@@ -459,53 +457,87 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              Row(
-  children: [
-    Expanded(
-      child: TextFormField(
-        controller: _poNumberController,
-        decoration: const InputDecoration(
-          labelText: 'Enter PO Number',
-          border: OutlineInputBorder(),
-        ),
-        inputFormatters: [UpperCaseTextFormatter()],
-      ),
-    ),
-    const SizedBox(width: 10),
-    SizedBox(
-      width: 75,
-      child: TextFormField(
-              controller: _koliController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Koli',
-                border: OutlineInputBorder(),
+               Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _poNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter PO Number',
+                      border: OutlineInputBorder(),
+                    ),
+                    inputFormatters: [UpperCaseTextFormatter()],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 75,
+                  child: TextFormField(
+                    controller: _koliController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Koli',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                onPressed: () async {
+                  String poNumber = _poNumberController.text.trim();
+                  if (poNumber.isNotEmpty) {
+                    // Tampilkan loading indicator (optional)
+                    setState(() {
+                      isLoading = true;
+                    });
+
+                    try {
+                      // Memanggil fungsi fetchPOData dan menunggu hasilnya
+                      await fetchPOData(poNumber);
+
+                      // Setelah berhasil memanggil data PO, tampilkan notifikasi
+                      Flushbar(
+                        message: 'PO berhasil terpanggil!',
+                        duration: Duration(seconds: 3),
+                        flushbarPosition: FlushbarPosition.TOP,
+                        backgroundColor: Colors.green,
+                      ).show(context);
+                    } catch (e) {
+                      // Tampilkan pesan error jika ada masalah
+                      Flushbar(
+                        message: 'Terjadi kesalahan: $e',
+                        duration: Duration(seconds: 3),
+                        flushbarPosition: FlushbarPosition.TOP,
+                        backgroundColor: Colors.red,
+                      ).show(context);
+                    } finally {
+                      // Sembunyikan loading indicator setelah data diproses
+                      setState(() {
+                        isLoading = false;
+                      });
+                    }
+                  } else {
+                    // Tampilkan notifikasi jika input nomor PO kosong
+                    Flushbar(
+                      message: 'Silakan masukkan nomor PO yang valid',
+                      duration: Duration(seconds: 3),
+                      flushbarPosition: FlushbarPosition.TOP,
+                      backgroundColor: Colors.red,
+                    ).show(context);
+                  }
+                },
+                child: const Icon(Icons.search),
               ),
-            ),
-    ),
-    ElevatedButton(
-      onPressed: () {
-        String poNumber = _poNumberController.text.trim();
-        if (poNumber.isNotEmpty) {
-          fetchPOData(poNumber);
-        } else {
-          Flushbar(
-        message: 'Please enter a valid PO number',
-        duration: Duration(seconds: 3),
-        flushbarPosition: FlushbarPosition.TOP,
-        backgroundColor: Colors.red,
-    ).show(context);
-          // ScaffoldMessenger.of(context).showSnackBar(
-          //   const SnackBar(
-          //     content: Text('Please enter a valid PO number'),
-          //   ),
-          // );
-        }
-      },
-      child: const Icon(Icons.search),
-    ),
-  ],
-),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Tampilkan loading indicator saat data sedang diproses
+          if (isLoading)
+            const CircularProgressIndicator()
+          else if (detailPOData.isNotEmpty)
+            const Text('Data PO Sudah Tersimpan')
+          else
+            const Text('Belum ada PO yang Tersimpan'),
+          
                const SizedBox(height: 20),
             
             TextFormField(
@@ -514,7 +546,6 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
                 labelText: 'Enter Barcode',
                 border: OutlineInputBorder(),
               ),
-              // Detect when "Enter" is pressed on keyboard
               focusNode: textsecond,
               onFieldSubmitted: (value) 
               
@@ -534,72 +565,57 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
         flushbarPosition: FlushbarPosition.TOP,
         backgroundColor: Colors.red,
     ).show(context);
-                  // ScaffoldMessenger.of(context).showSnackBar(
-                  //   const SnackBar(
-                  //     content: Text('Please enter a valid barcode'),
-                  //   ),
-                  // );
                 }
               },
         inputFormatters: [UpperCaseTextFormatter()],
          
             ),
-          // TextFormField(
-          //   controller: _barcodeController,
-          //   decoration: const InputDecoration(
-          //     labelText: 'Enter Barcode',
-          //     border: OutlineInputBorder(),
-          //   ),
-          //   onChanged: (value) {
-          //     if (value.isNotEmpty) {
-          //       checkAndSumQty(value);
-          //     }
-          //   },
-          // ),
-              const SizedBox(height: 20),
-              isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : Expanded(
-                      child: Column(
-                        children: [
-                          if (detailPOData.isEmpty)
-                            const Center(
-                                child: Text('Search for a PO to see details'))
-                          else
-                            Expanded(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.vertical,
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: DataTable(
-                                    columns: const [
-                                      DataColumn(label: Text('Item SKU')),
-                                      DataColumn(label: Text('Item Name')),
-                                      DataColumn(label: Text('Barcode')),
-                                      DataColumn(label: Text('Qty PO')),
-                                    ],
-                                    rows: detailPOData
-                                        .map(
-                                          (e) => DataRow(
-                                            cells: [
-                                            DataCell(Text(
-                                                  e['ITEMSKU']?.toString() ??
-                                                      '')),
-                                            DataCell(Text(e['ITEMSKUNAME']
-                                                      ?.toString() ??
-                                                  '')),
-                                            DataCell(Text(
-                                                  e['BARCODE']?.toString() ??
-                                                      '')),
-                                            DataCell(Text((e['QTYPO'] as String).replaceAll(formatQTYRegex, ''))),
-                                            ],
-                                          ),
-                                        )
-                                        .toList(),
-                                  ),
-                                ),
-                              ),
-                            ),
+         
+          
+              // const SizedBox(height: 20),
+              // isLoading
+              //     ? const Center(child: CircularProgressIndicator())
+              //     : Expanded(
+              //         child: Column(
+              //           children: [
+              //             if (detailPOData.isEmpty)
+              //               const Center(
+              //                   child: Text('Search for a PO to see details'))
+              //             else
+              //               Expanded(
+              //                 child: SingleChildScrollView(
+              //                   scrollDirection: Axis.vertical,
+              //                   child: SingleChildScrollView(
+              //                     scrollDirection: Axis.horizontal,
+              //                     child: DataTable(
+              //                       columns: const [
+              //                         DataColumn(label: Text('Item SKU')),
+              //                         DataColumn(label: Text('Item Name')),
+              //                         DataColumn(label: Text('Barcode')),
+              //                         DataColumn(label: Text('Qty PO')),
+              //                       ],
+              //                       rows: detailPOData
+              //                           .map(
+              //                             (e) => DataRow(
+              //                               cells: [
+              //                               DataCell(Text(
+              //                                     e['ITEMSKU']?.toString() ??
+              //                                         '')),
+              //                               DataCell(Text(e['ITEMSKUNAME']
+              //                                         ?.toString() ??
+              //                                     '')),
+              //                               DataCell(Text(
+              //                                     e['BARCODE']?.toString() ??
+              //                                         '')),
+              //                               DataCell(Text((e['QTYPO'] as String).replaceAll(formatQTYRegex, ''))),
+              //                               ],
+              //                             ),
+              //                           )
+              //                           .toList(),
+              //                     ),
+              //                   ),
+              //                 ),
+              //               ),
                           const SizedBox(height: 20),
                           Expanded(
                             child: Column(
@@ -617,6 +633,7 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
             controller: ScrollController(),
             child: DataTable(
               columns: const [
+               
                 DataColumn(label: Text('PO Number')),
                 DataColumn(label: Text('Item SKU')),
                 DataColumn(label: Text('Item Name')),
@@ -632,6 +649,7 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
                 ...scannedResults.map(
                   (result) => DataRow(
                     cells: [
+                     
                       DataCell(Text(result['pono'] ?? '')),
                       DataCell(Text(result['item_sku'] ?? '')),
                       DataCell(Text(result['item_name'] ?? '')),
@@ -648,6 +666,7 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
                 ...differentScannedResults.map(
                   (result) => DataRow(
                     cells: [
+                     
                       DataCell(Text(result['pono'] ?? '')),
                       DataCell(Text(result['item_sku'] ?? '')),
                       DataCell(Text(result['item_name'] ?? '')),
@@ -724,10 +743,11 @@ Future<Map<String, dynamic>?> fetchMasterItem(String scannedCode) async {
                         ]
                   )
           )
-            ]
-    )
-        )
     );
+    //         ]
+    // )
+    //     )
+    // );
   }
 }
 

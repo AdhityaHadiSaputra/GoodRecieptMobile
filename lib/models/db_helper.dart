@@ -444,6 +444,16 @@ Future<void> clearMasterItems() async {
         'SELECT * FROM po ORDER BY id DESC${limit != null ? ' LIMIT $limit' : ''}';
     return await db.rawQuery(query);
   }
+  
+
+ 
+  Future<List<Map<String, dynamic>>> getSummaryRecentPOs() async {
+    final db = await database;
+    final query = 
+        'SELECT item_sku, item_name, barcode, SUM(qty_scanned) as totalscan FROM scanned_results WHERE user = ? GROUP BY item_sku, item_name, barcode';
+    return await db.rawQuery(query); // pass userId dynamically if needed
+  }
+
 
   Future<void> clearPOs() async {
     final db = await database;
@@ -456,6 +466,7 @@ Future<void> clearMasterItems() async {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='$tableName'");
     return result.isNotEmpty;
   }
+
 
   Future<void> checkTable() async {
     bool exists = await checkTableExists('po');
@@ -486,6 +497,13 @@ Future<void> clearMasterItems() async {
       'noitems',
       where: 'pono = ? AND scandate = ?',
       whereArgs: [poNumber, scandate],
+    );
+  }Future<void>  deletePONoItemsResult(String poNumber) async {
+    final db = await database;
+    await db.delete(
+      'noitems',
+      where: 'pono = ? AND scandate = ?',
+      whereArgs: [poNumber],
     );
   }
 

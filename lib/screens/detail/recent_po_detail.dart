@@ -27,11 +27,13 @@ class _PODetailPageState extends State<PODetailPage> {
   List<Map<String, dynamic>> poDetails = [];
   List<Map<String, dynamic>> scannedResults = [];
   List<Map<String, dynamic>> noitemScannedResults = [];
+  List<Map<String, dynamic>> recentPOSummary = [];
   // List<Map<String, dynamic>> scannedOverResults = [];
   bool isLoading = true;
   final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
   QRViewController? controller;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final apiService = ApiService();
   String? userId;
 
   @override
@@ -40,6 +42,7 @@ class _PODetailPageState extends State<PODetailPage> {
     fetchPODetails();
     fetchScannedResults();
     fetchNoItemsResults();
+    fetchSummaryRecentPOs();
     // fetchScannedOverResults();
     fetchData(); // Fetch user data and set userId
   }
@@ -55,6 +58,18 @@ class _PODetailPageState extends State<PODetailPage> {
       isLoading = false;
     });
   }
+
+Future<void> fetchSummaryRecentPOs() async {
+    try {
+      final summary = await dbHelper.getSummaryRecentPOs();
+      setState(() {
+        recentPOSummary = summary;
+      });
+    } catch (e) {
+      print('Error fetching recent PO summary: $e');
+    }
+  }
+
 
   Future<void> fetchData() async {
     try {
@@ -99,18 +114,6 @@ class _PODetailPageState extends State<PODetailPage> {
       print('Error fetching scanned results: $e');
     }
   }
-
-  // Future<void> fetchScannedOverResults() async {
-  //   try {
-  //     final results = await dbHelper.getPODifferentScannedDetails(widget.poNumber);
-  //     setState(() {
-  //       scannedOverResults = results;
-  //     });
-  //   } catch (e) {
-  //     print('Error fetching scanned over results: $e');
-  //   }
-  // }
-
   void _startScanningForItem(String barcode) {
     Navigator.push(
       context,
@@ -122,14 +125,47 @@ class _PODetailPageState extends State<PODetailPage> {
       ),
     );
   }
+  void _handleOverScannedItem(Map<String, dynamic> item, String scannedCode) {
+  // Insert the over-scanned item into the over-scanned list
+  setState(() {
+    noitemScannedResults.add({
+      'pono': widget.poNumber,
+      'item_sku': item['item_sku'],
+      'item_name': item['item_name'],
+      'barcode': scannedCode,
+      'vendorbarcode': item['vendorbarcode'],
+      'qty_scanned': item['qty_scanned'],
+      'scandate': DateTime.now().toString(),
+      'device_name': item['device_name'],
+      'user': userId,
+      'qty_koli': 0,
+      'type': 'over',
+    });
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Over-scanned item! Exceeds PO quantity.')),
+  );
+}
 
   void checkAndSumQty(String scannedCode) {
     for (var item in poDetails) {
-      if (item['barcode'] == scannedCode) {
-        _showQtyInputDialog(item, scannedCode);
+    if (item['barcode'] == scannedCode) {
+      // Get PO quantity and scanned quantity
+      int poQty = int.tryParse(item['qty_po'].toString()) ?? 0;
+      int scannedQty = int.tryParse(item['qty_scanned']?.toString() ?? '0') ?? 0;
+
+      // If scanned quantity exceeds PO quantity, mark it as over
+      if (scannedQty > poQty) {
+        _handleOverScannedItem(item, scannedCode);
         return;
       }
+
+      // Increment the scanned quantity
+      _showQtyInputDialog(item, scannedCode);
+      return;
     }
+  }
 
     bool foundInScanned = scannedResults.any((result) => result['barcode'] == scannedCode);
     // bool foundInScannedOver = scannedOverResults.any((result) => result['barcode'] == scannedCode);
@@ -259,7 +295,7 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
     List<Map<String, dynamic>> dataScanOver = noitemScannedResults.map((item) {
       return {
         "pono": item['pono'],
-        "itemsku": '-',
+        "itemsku": item['item_sku'],
         "skuname": item['item_name'],
         "barcode": item['vendorbarcode'] ?? '',
         "vendorbarcode": item['barcode'],
@@ -302,11 +338,35 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
     }
   }
 
+   Widget buildRecentPOSummary() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('Item SKU')),
+          DataColumn(label: Text('Item Name')),
+          DataColumn(label: Text('Barcode')),
+          DataColumn(label: Text('Total Scanned')),
+        ],
+        rows: recentPOSummary.map((detail) {
+          return DataRow(cells: [
+            DataCell(Text(detail['item_sku'] ?? '')),
+            DataCell(Text(detail['item_name'] ?? '')),
+            DataCell(Text(detail['barcode'] ?? '')),
+            DataCell(Text(detail['totalscan'].toString())),
+          ]);
+        }).toList(),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.poNumber}'),
+         title: Text('${widget.poNumber}'),
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
@@ -317,28 +377,8 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('ItemSKU')),
-                            DataColumn(label: Text('ItemSKU Name')),
-                            DataColumn(label: Text('Barcode')),
-                            DataColumn(label: Text('QTY PO')),
-                            DataColumn(label: Text('Device Name')),
-                          ],
-                          rows: poDetails.map((detail) {
-                            return DataRow(cells: [
-                              DataCell(Text(detail['item_sku'] ?? '')),
-                              DataCell(Text(detail['item_name'] ?? '')),
-                              DataCell(Text(detail['barcode'] ?? '')),
-                              DataCell(Text(detail['qty_po'].toString())),
-                              DataCell(Text(detail['device_name'] ?? '')),
-                         
-                            ]);
-                          }).toList(),
-                        ),
-                      ),
+                       buildRecentPOSummary(),
+                      
                       SingleChildScrollView(
                   scrollDirection: Axis.vertical,
                   child: Column(
@@ -348,7 +388,8 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
                           columns: const [
-                            DataColumn(label: Text('PONO')),
+                           
+                            DataColumn(label: Text('PO NO')),
                             DataColumn(label: Text('Item SKU')),
                             DataColumn(label: Text('Item SKU Name')),
                             DataColumn(label: Text('Barcode')),
@@ -365,6 +406,7 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                           ],
                           rows: scannedResults.map((detail) {
                             return DataRow(cells: [
+                      
                               DataCell(Text(detail['pono'] ?? '')),
                               DataCell(Text(detail['item_sku'] ?? '')),
                               DataCell(Text(detail['item_name'] ?? '')),
