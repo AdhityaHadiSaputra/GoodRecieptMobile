@@ -2,7 +2,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get_utils/src/platform/platform.dart';
-import 'package:intl/intl.dart';
+// import 'package:intl/intl.dart';
 import 'package:metrox_po/api_service.dart';
 import 'package:metrox_po/models/db_helper.dart';
 import 'package:http/http.dart' as http;
@@ -28,6 +28,8 @@ class _PODetailPageState extends State<PODetailPage> {
   List<Map<String, dynamic>> scannedResults = [];
   List<Map<String, dynamic>> noitemScannedResults = [];
   List<Map<String, dynamic>> recentPOSummary = [];
+  List<Map<String, dynamic>> recentNoPOSummary = [];
+
   // List<Map<String, dynamic>> scannedOverResults = [];
   bool isLoading = true;
   final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
@@ -42,7 +44,8 @@ class _PODetailPageState extends State<PODetailPage> {
     fetchPODetails();
     fetchScannedResults();
     fetchNoItemsResults();
-    fetchSummaryRecentPOs();
+  fetchSummaryRecentPOs();
+  fetchSummaryRecentNoPO();
     // fetchScannedOverResults();
     fetchData(); // Fetch user data and set userId
   }
@@ -60,15 +63,29 @@ class _PODetailPageState extends State<PODetailPage> {
   }
 
 Future<void> fetchSummaryRecentPOs() async {
-    try {
-      final summary = await dbHelper.getSummaryRecentPOs();
-      setState(() {
-        recentPOSummary = summary;
-      });
-    } catch (e) {
-      print('Error fetching recent PO summary: $e');
-    }
+  try {
+    final summary = await dbHelper.getSummaryRecentPOs(); // userId is fetched within dbHelper
+    setState(() {
+      recentPOSummary = summary;
+    });
+    print('summary: $summary');
+  } catch (e) {
+    print('Error fetching recent PO summary: $e');
   }
+}
+Future<void> fetchSummaryRecentNoPO() async {
+  try {
+    final summary = await dbHelper.getSummaryRecentNoPO(); // userId is fetched within dbHelper
+    setState(() {
+      recentNoPOSummary = summary;
+    });
+    print('summary: $summary');
+  } catch (e) {
+    print('Error fetching recent PO summary: $e');
+  }
+}
+
+
 
 
   Future<void> fetchData() async {
@@ -100,6 +117,7 @@ Future<void> fetchSummaryRecentPOs() async {
       setState(() {
         scannedResults = results;
       });
+      print(results);
     } catch (e) {
       print('Error fetching scanned results: $e');
     }
@@ -337,28 +355,105 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
       );
     }
   }
+  Widget buildRecentPOSummary() {
+  int grandTotal = recentPOSummary.fold(0, (int sum, detail) {
+    return sum + (detail['totalscan'] as int? ?? 0);
+  });
 
-   Widget buildRecentPOSummary() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Item SKU')),
-          DataColumn(label: Text('Item Name')),
-          DataColumn(label: Text('Barcode')),
-          DataColumn(label: Text('Total Scanned')),
-        ],
-        rows: recentPOSummary.map((detail) {
-          return DataRow(cells: [
-            DataCell(Text(detail['item_sku'] ?? '')),
-            DataCell(Text(detail['item_name'] ?? '')),
-            DataCell(Text(detail['barcode'] ?? '')),
-            DataCell(Text(detail['totalscan'].toString())),
-          ]);
-        }).toList(),
+return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Text(
+          'PO Summary',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
-    );
-  }
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Item SKU')),
+            DataColumn(label: Text('Item Name')),
+            DataColumn(label: Text('Barcode')),
+            DataColumn(label: Text('Total Scanned')),
+          ],
+          rows: [
+            ...recentPOSummary.map((detail) {
+              return DataRow(cells: [
+                DataCell(Text(detail['item_sku'] ?? '')),
+                DataCell(Text(detail['item_name'] ?? '')),
+                DataCell(Text(detail['barcode'] ?? '')),
+                DataCell(Text(detail['totalscan'].toString())),
+              ]);
+            }).toList(),
+            // Add a row for the grand total
+            DataRow(cells: [
+              const DataCell(Text('')),
+              const DataCell(Text('')),
+              const DataCell(Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataCell(Text(grandTotal.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
+            ]),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+Widget buildRecentNoPOSummary() {
+  int grandTotal = recentNoPOSummary.fold(0, (int sum, detail) {
+    return sum + (detail['totalscan'] as int? ?? 0);
+  });
+
+ 
+return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Text(
+          'NO PO Summary',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Item SKU')),
+            DataColumn(label: Text('Item Name')),
+            DataColumn(label: Text('Barcode')),
+            DataColumn(label: Text('Total Scanned')),
+          ],
+          rows: [
+            ...recentNoPOSummary.map((detail) {
+              return DataRow(cells: [
+                DataCell(Text(detail['item_sku'] ?? '')),
+                DataCell(Text(detail['item_name'] ?? '')),
+                DataCell(Text(detail['barcode'] ?? '')),
+                DataCell(Text(detail['totalscan'].toString())),
+              ]);
+            }).toList(),
+            DataRow(cells: [
+              const DataCell(Text('')),
+              const DataCell(Text('')),
+              const DataCell(Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataCell(Text(grandTotal.toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
+            ]),
+          ],
+        ),
+      ),
+    ],
+  );
+}
 
 
   @override
@@ -378,127 +473,128 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                        buildRecentPOSummary(),
+                       buildRecentNoPOSummary(),
                       
-                      SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          columns: const [
+                  //     SingleChildScrollView(
+                  // scrollDirection: Axis.vertical,
+                  // child: Column(
+                  //   crossAxisAlignment: CrossAxisAlignment.start,
+                  //   children: [
+                  //     SingleChildScrollView(
+                  //       scrollDirection: Axis.horizontal,
+                  //       child: DataTable(
+                  //         columns: const [
                            
-                            DataColumn(label: Text('PO NO')),
-                            DataColumn(label: Text('Item SKU')),
-                            DataColumn(label: Text('Item SKU Name')),
-                            DataColumn(label: Text('Barcode')),
-                            DataColumn(label: Text('VendorBarcode')),
-                            DataColumn(label: Text('QTY')),
-                            DataColumn(label: Text('AudUser')),
-                            DataColumn(label: Text('type')),
-                            DataColumn(label: Text('AudDate')),
-                            DataColumn(label: Text('MachineCd')),
-                            DataColumn(label: Text('QTY Koli')),
-                            DataColumn(label: Text('Actions')),
+                  //           DataColumn(label: Text('PO NO')),
+                  //           DataColumn(label: Text('Item SKU')),
+                  //           DataColumn(label: Text('Item SKU Name')),
+                  //           DataColumn(label: Text('Barcode')),
+                  //           DataColumn(label: Text('VendorBarcode')),
+                  //           DataColumn(label: Text('QTY')),
+                  //           DataColumn(label: Text('AudUser')),
+                  //           DataColumn(label: Text('type')),
+                  //           DataColumn(label: Text('AudDate')),
+                  //           DataColumn(label: Text('MachineCd')),
+                  //           DataColumn(label: Text('QTY Koli')),
+                  //           DataColumn(label: Text('Actions')),
 
                            
-                          ],
-                          rows: scannedResults.map((detail) {
-                            return DataRow(cells: [
+                  //         ],
+                  //         rows: scannedResults.map((detail) {
+                  //           return DataRow(cells: [
                       
-                              DataCell(Text(detail['pono'] ?? '')),
-                              DataCell(Text(detail['item_sku'] ?? '')),
-                              DataCell(Text(detail['item_name'] ?? '')),
-                              DataCell(Text(detail['vendorbarcode'] ?? '')),
-                              DataCell(Text(detail['barcode'] ?? '')),
+                  //             DataCell(Text(detail['pono'] ?? '')),
+                  //             DataCell(Text(detail['item_sku'] ?? '')),
+                  //             DataCell(Text(detail['item_name'] ?? '')),
+                  //             DataCell(Text(detail['vendorbarcode'] ?? '')),
+                  //             DataCell(Text(detail['barcode'] ?? '')),
                               
-                              DataCell(Text((detail['qty_scanned'] ?? 0)
-                                  .toString())),
-                              DataCell(Text(detail['user'] ?? '')),
-                              DataCell(Text(detail['type'] ?? '')),
-                              DataCell(Text(detail['scandate'] != null
-                                  ? DateFormat('yyyy-MM-dd HH:mm:ss')
-                                      .format(DateTime.parse(detail['scandate']))
-                                  : '')),
-                              DataCell(Text(detail['device_name'] ?? '')),
-                              DataCell(Text((detail['qty_koli'] ?? 0).toString())),
-                              DataCell(
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        _deleteScannedResult(
-                                            detail['scandate'] ?? '');
-                                      },
-                                      child: Icon(Icons.delete),
-                                    ),
+                  //             DataCell(Text((detail['qty_scanned'] ?? 0)
+                  //                 .toString())),
+                  //             DataCell(Text(detail['user'] ?? '')),
+                  //             DataCell(Text(detail['type'] ?? '')),
+                  //             DataCell(Text(detail['scandate'] != null
+                  //                 ? DateFormat('yyyy-MM-dd HH:mm:ss')
+                  //                     .format(DateTime.parse(detail['scandate']))
+                  //                 : '')),
+                  //             DataCell(Text(detail['device_name'] ?? '')),
+                  //             DataCell(Text((detail['qty_koli'] ?? 0).toString())),
+                  //             DataCell(
+                  //               Row(
+                  //                 children: [
+                  //                   TextButton(
+                  //                     onPressed: () {
+                  //                       _deleteScannedResult(
+                  //                           detail['scandate'] ?? '');
+                  //                     },
+                  //                     child: Icon(Icons.delete),
+                  //                   ),
                                     
-                            ])
-                              )
-                            ]);
-                          }).toList(),
-                        ),
+                  //           ])
+                  //             )
+                  //           ]);
+                  //         }).toList(),
+                  //       ),
                         
-                      ),
-                      SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('PONO')),
-                            DataColumn(label: Text('Item SKU')),
-                            DataColumn(label: Text('Item SKU Name')),
-                            DataColumn(label: Text('Barcode')),
-                            DataColumn(label: Text('VendorBarcode')),
-                            DataColumn(label: Text('QTY')),
-                            DataColumn(label: Text('AudUser')),
-                            DataColumn(label: Text('type')),
-                            DataColumn(label: Text('AudDate')),
-                            DataColumn(label: Text('MachineCd')),
-                            DataColumn(label: Text('QTY Koli')),
-                            DataColumn(label: Text('Actions')),
-                          ],
-                          rows: noitemScannedResults.map((detail) {
-                            return DataRow(cells: [
-                              DataCell(Text(detail['pono'] ?? '')),
-                              DataCell(Text(detail['item_sku'] ?? '')),
-                              DataCell(Text(detail['item_name'] ?? '')),
-                              DataCell(Text(detail['vendorbarcode'] ?? '')),
-                              DataCell(Text(detail['barcode'] ?? '')),
-                              DataCell(Text((detail['qty_scanned'] ?? 0)
-                                  .toString())),
-                              DataCell(Text(detail['user'] ?? '')),
-                              DataCell(Text(detail['type'] ?? '')),
-                              DataCell(Text(detail['scandate'] != null
-                                  ? DateFormat('yyyy-MM-dd HH:mm:ss')
-                                      .format(DateTime.parse(detail['scandate']))
-                                  : '')),
-                              DataCell(Text(detail['device_name'] ?? '')),
-                              DataCell(Text((detail['qty_koli'] ?? 0).toString())),
-                              DataCell(
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        _deleteScannedNoItemResult(
-                                            detail['scandate'] ?? '');
-                                      },
-                                      child: Icon(Icons.delete),
-                                    ),
+                  //     ),
+                  //     SingleChildScrollView(
+                  // scrollDirection: Axis.vertical,
+                  // child: Column(
+                  //   crossAxisAlignment: CrossAxisAlignment.start,
+                  //   children: [
+                  //     SingleChildScrollView(
+                  //       scrollDirection: Axis.horizontal,
+                  //       child: DataTable(
+                  //         columns: const [
+                  //           DataColumn(label: Text('PONO')),
+                  //           DataColumn(label: Text('Item SKU')),
+                  //           DataColumn(label: Text('Item SKU Name')),
+                  //           DataColumn(label: Text('Barcode')),
+                  //           DataColumn(label: Text('VendorBarcode')),
+                  //           DataColumn(label: Text('QTY')),
+                  //           DataColumn(label: Text('AudUser')),
+                  //           DataColumn(label: Text('type')),
+                  //           DataColumn(label: Text('AudDate')),
+                  //           DataColumn(label: Text('MachineCd')),
+                  //           DataColumn(label: Text('QTY Koli')),
+                  //           DataColumn(label: Text('Actions')),
+                  //         ],
+                  //         rows: noitemScannedResults.map((detail) {
+                  //           return DataRow(cells: [
+                  //             DataCell(Text(detail['pono'] ?? '')),
+                  //             DataCell(Text(detail['item_sku'] ?? '')),
+                  //             DataCell(Text(detail['item_name'] ?? '')),
+                  //             DataCell(Text(detail['vendorbarcode'] ?? '')),
+                  //             DataCell(Text(detail['barcode'] ?? '')),
+                  //             DataCell(Text((detail['qty_scanned'] ?? 0)
+                  //                 .toString())),
+                  //             DataCell(Text(detail['user'] ?? '')),
+                  //             DataCell(Text(detail['type'] ?? '')),
+                  //             DataCell(Text(detail['scandate'] != null
+                  //                 ? DateFormat('yyyy-MM-dd HH:mm:ss')
+                  //                     .format(DateTime.parse(detail['scandate']))
+                  //                 : '')),
+                  //             DataCell(Text(detail['device_name'] ?? '')),
+                  //             DataCell(Text((detail['qty_koli'] ?? 0).toString())),
+                  //             DataCell(
+                  //               Row(
+                  //                 children: [
+                  //                   TextButton(
+                  //                     onPressed: () {
+                  //                       _deleteScannedNoItemResult(
+                  //                           detail['scandate'] ?? '');
+                  //                     },
+                  //                     child: Icon(Icons.delete),
+                  //                   ),
                                     
                                     
-                            ])
-                              )
-                            ]);
-                          }).toList(),
-                        ),
+                  //           ])
+                  //             )
+                  //           ]);
+                  //         }).toList(),
+                  //       ),
                         
-                      ),
+                  //     ),
                       
                       SizedBox(height: 20), // Add some spacing
                     Center(
@@ -512,11 +608,12 @@ Future<void> _updateScannedItem(Map<String, dynamic> item, int inputQty) async {
                     ],
                   ),
                 ),
-                  ]))
-                    ]
-                  )
-              )
     );
+    //               ]))
+    //                 ]
+    //               )
+    //           )
+    // );
   
               
     

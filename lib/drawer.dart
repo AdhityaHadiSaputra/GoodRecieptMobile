@@ -5,6 +5,7 @@ import 'package:metrox_po/screens/dashboard.dart';
 import 'package:metrox_po/screens/detail/master_item.dart';
 // import 'package:metrox_po/screens/purchase_order.dart';
 import 'package:metrox_po/screens/recent_po.dart';
+
 import 'package:metrox_po/screens/scanqr_page.dart';
 
 import 'package:metrox_po/utils/storage.dart';
@@ -170,6 +171,7 @@ class _MyDrawerState extends State<MyDrawer> {
                   );
                 },
               ),
+               
                ListTile(
                 leading: Icon(Icons.article),
                 title: const Text("Master Item"),
@@ -193,6 +195,8 @@ class _MyDrawerState extends State<MyDrawer> {
                   );
                 },
               ),
+               
+             
               const Divider(),
               
               ListTile(

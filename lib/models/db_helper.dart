@@ -453,6 +453,12 @@ Future<void> clearMasterItems() async {
         'SELECT item_sku, item_name, barcode, SUM(qty_scanned) as totalscan FROM scanned_results WHERE user = ? GROUP BY item_sku, item_name, barcode';
     return await db.rawQuery(query); // pass userId dynamically if needed
   }
+   Future<List<Map<String, dynamic>>> getSummaryRecentNoPO() async {
+    final db = await database;
+    final query = 
+        'SELECT item_sku, item_name, barcode, SUM(qty_scanned) as totalscan FROM noitem WHERE user = ? GROUP BY item_sku, item_name, barcode';
+    return await db.rawQuery(query); // pass userId dynamically if needed
+  }
 
 
   Future<void> clearPOs() async {

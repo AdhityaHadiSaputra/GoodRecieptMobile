@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:metrox_po/models/db_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class APIUrl{
   static String BASE_URL = 'http://108.136.252.63:8080/pogr';
@@ -9,9 +10,33 @@ class APIUrl{
   static String MASTER_URL = '$BASE_URL/getmaster.php';
 }
 
+// class ApiService {
+//   Future<Map<String, dynamic>> loginUser(
+//       String USERID, String USERPASSWORD) async {
+//     try {
+//       final response = await http.post(
+//         Uri.parse(APIUrl.LOGIN_URL),
+//         body: {
+//           'ACTION': 'LOGIN',
+//           'USERID': USERID,
+//           'USERPASSWORD': USERPASSWORD,
+//         },
+//       );
+//       if (response.statusCode == 200) {
+//         Map<String, dynamic> result = jsonDecode(response.body);
+        
+//         return result;
+//       } else {
+//         throw Exception('Failed to login');
+//       }
+//     } catch (error) {
+//       print('Error: $error');
+//       rethrow;
+//     }
+//   }
+// }
 class ApiService {
-  Future<Map<String, dynamic>> loginUser(
-      String USERID, String USERPASSWORD) async {
+  Future<Map<String, dynamic>> loginUser(String USERID, String USERPASSWORD) async {
     try {
       final response = await http.post(
         Uri.parse(APIUrl.LOGIN_URL),
@@ -21,8 +46,27 @@ class ApiService {
           'USERPASSWORD': USERPASSWORD,
         },
       );
+
       if (response.statusCode == 200) {
         Map<String, dynamic> result = jsonDecode(response.body);
+        
+        // Debug: Print the full API response
+        print('API Response: $result');
+        
+        // Extract USERID from the nested structure
+        String? userId;
+        if (result['msg'] is List && result['msg'].isNotEmpty) {
+          userId = result['msg'][0]['USERID']; // Access the first element in msg
+        }
+
+        if (userId != null && userId.isNotEmpty) {
+          SharedPreferences prefs = await SharedPreferences.getInstance();
+          await prefs.setString('userId', userId); // Save userId to SharedPreferences
+          print('User ID saved: $userId');
+        } else {
+          print('Error: userId is null or empty in the API response');
+        }
+
         return result;
       } else {
         throw Exception('Failed to login');
@@ -33,6 +77,7 @@ class ApiService {
     }
   }
 }
+
 
 
 class Apiuser {
